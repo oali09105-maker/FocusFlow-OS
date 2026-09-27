@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "FocusFlow OS",
+    "slug": "focusflow-os",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0E14",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0E14"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.zeeucreativestudio.focusflowos",
+      "buildNumber": "1",
+      "infoPlist": {
+        "GADApplicationIdentifier": "ca-app-pub-5206710479803910~6573330902",
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads that support FocusFlow OS, which remains 100% free with zero in-app purchases.",
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0E14"
+      },
+      "package": "com.zeeucreativestudio.focusflowos",
+      "versionCode": 1,
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.INTERNET",
+        "android.permission.FOREGROUND_SERVICE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-5206710479803910~6573330902",
+          "iosAppId": "ca-app-pub-5206710479803910~6573330902",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads that support FocusFlow OS, which remains 100% free with zero in-app purchases."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "zeeu-focusflow-os"
+      }
+    },
+    "owner": "zeeu-creative-studio"
+  }
+}
