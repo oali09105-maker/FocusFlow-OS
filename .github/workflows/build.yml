@@ -36,9 +36,34 @@ jobs:
       - name: Setup EAS CLI
         run: npm install -g eas-cli
 
-      - name: Build Local APK & AAB
+      - name: Expo Prebuild
         run: |
           npx expo prebuild --platform android --clean
+          git checkout android/app/build.gradle || true
+          node -e '
+            const fs = require("fs");
+            let bg = fs.readFileSync("android/app/build.gradle", "utf8");
+            if (!bg.includes("release.keystore")) {
+              bg = bg.replace("signingConfigs {", "signingConfigs {\n        release {\n            storeFile file(\x27release.keystore\x27)\n            storePassword \x27zeeu2026release\x27\n            keyAlias \x27zeeu-key\x27\n            keyPassword \x27zeeu2026release\x27\n        }");
+              bg = bg.replace("signingConfig signingConfigs.debug", "signingConfig signingConfigs.release");
+              fs.writeFileSync("android/app/build.gradle", bg);
+            }
+          '
+
+      - name: Generate Production Release Keystore
+        run: |
+          keytool -genkeypair -v \
+            -storepass "zeeu2026release" \
+            -keypass "zeeu2026release" \
+            -keystore android/app/release.keystore \
+            -alias "zeeu-key" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=ZeeU, OU=Production, O=ZeeU Creative Studio, L=Karachi, S=Sindh, C=PK"
+
+      - name: Build Local APK & AAB
+        run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
