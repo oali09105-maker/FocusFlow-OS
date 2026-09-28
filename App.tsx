@@ -118,8 +118,8 @@ const GRADIENT_RING = {
 // so the JS side always matches the native manifest values exactly.
 const ADMOB_CONFIG = {
   appId: 'ca-app-pub-5206710479803910~6573330902',
-  bannerId: 'ca-app-pub-5206710479803910/8395705158',
-  interstitialId: 'ca-app-pub-5206710479803910/4451309452',
+  bannerId: 'ca-app-pub-5206710479803910/8357550158',
+  interstitialId: 'ca-app-pub-5206710479803910/4451369452',
   rewardedId: 'ca-app-pub-5206710479803910/1321004221',
 };
 

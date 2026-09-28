@@ -1,3 +1,17 @@
+<div align="center">
+  <img src="assets/banner.png" alt="FocusFlow OS Banner" width="100%" style="border-radius: 12px; margin-bottom: 12px;" />
+  <br />
+  <img src="assets/icon.png" alt="ZeeU Creative Studio Logo" width="120" style="border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" />
+  <br />
+  <h3>👑 ZEEU CREATIVE STUDIO • FOCUSFLOW OS</h3>
+  <p><em>Master Your Time • Eliminate Distraction • Achieve Greatness</em></p>
+  <a href="https://zeeu-creative-studio-e-book-vault.ai.studio">
+    <img src="https://img.shields.io/badge/Official%20Portal-ZeeU%20Creative%20Studio-amber?style=for-the-badge&logo=google" alt="Portal" />
+  </a>
+</div>
+
+---
+
 # FocusFlow OS
 
 **Master Your Time • Eliminate Distraction • Achieve Greatness**
@@ -74,8 +88,8 @@ A low-opacity brand watermark sits above the banner on every tab. The banner its
 - Ads are configured conservatively to match the in-app disclosures: non-personalized, max content rating G, child-directed and under-age-of-consent tagging, and the `AD_ID` permission blocked in `app.json`. Adjust in `safeInitializeAds()` and `app.json` if your Play Console Families/Data Safety answers differ.
 - In `__DEV__` builds Google's test ad units are used (to avoid invalid traffic on your live units). Release builds use your real IDs:
   - App: `ca-app-pub-5206710479803910~6573330902`
-  - Banner: `ca-app-pub-5206710479803910/8395705158`
-  - Interstitial: `ca-app-pub-5206710479803910/4451309452`
+  - Banner: `ca-app-pub-5206710479803910/8357550158`
+  - Interstitial: `ca-app-pub-5206710479803910/4451369452`
   - Rewarded: `ca-app-pub-5206710479803910/1321004221`
 - No in-app purchases or paywalls anywhere.
 
