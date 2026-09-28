@@ -43,6 +43,7 @@ import {
   ActivityIndicator,
   AppState,
   AppStateStatus,
+  Linking,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -75,6 +76,9 @@ import {
   Wind,
   Brain,
   Sparkles,
+  CloudRain,
+  Radio,
+  Globe,
 } from 'lucide-react-native';
 
 // =============================================================================
@@ -117,6 +121,15 @@ const ADMOB_CONFIG = {
   bannerId: 'ca-app-pub-5206710479803910/8395705158',
   interstitialId: 'ca-app-pub-5206710479803910/4451309452',
   rewardedId: 'ca-app-pub-5206710479803910/1321004221',
+};
+
+const BRAND = {
+  studio: 'ZeeU Creative Studio',
+  appTitle: 'FocusFlow OS',
+  packageName: 'com.zeeucreativestudio.focusflowos',
+  portal: 'https://zeeu-creative-studio-e-book-vault.ai.studio',
+  copyright: '© 2026 ZeeU Creative Studio. All Rights Reserved.',
+  watermark: 'POWERED BY ZEEU CREATIVE STUDIO • 100% OFFLINE SANCTUARY',
 };
 
 const STORAGE_KEYS = {
@@ -322,6 +335,53 @@ function makeBinauralBeatGenerator(
   };
 }
 
+/**
+ * Calming rain: low-passed noise bed (steady patter) plus randomly timed,
+ * exponentially decaying droplet ticks for a natural texture.
+ */
+function makeRainGenerator(): ToneGenerator {
+  const rand = mulberry32(31415926);
+  let bedL = 0;
+  let bedR = 0;
+  let dropL = 0;
+  let dropR = 0;
+  return (_t, _n) => {
+    const wL = rand() * 2 - 1;
+    const wR = rand() * 2 - 1;
+    bedL += 0.18 * (wL - bedL);
+    bedR += 0.18 * (wR - bedR);
+    if (rand() < 0.0009) dropL = 0.5 + rand() * 0.4;
+    if (rand() < 0.0009) dropR = 0.5 + rand() * 0.4;
+    dropL *= 0.9965;
+    dropR *= 0.9965;
+    const hissL = (wL - bedL) * 0.16;
+    const hissR = (wR - bedR) * 0.16;
+    return [
+      bedL * 0.42 + hissL + dropL * (rand() * 2 - 1) * 0.25,
+      bedR * 0.42 + hissR + dropR * (rand() * 2 - 1) * 0.25,
+    ];
+  };
+}
+
+/**
+ * Midnight drone: stacked low sines with slow, loop-aligned swells
+ * (all frequencies are whole cycles over the 30s clip, so it loops cleanly).
+ */
+function makeMidnightDroneGenerator(): ToneGenerator {
+  const gain = 0.13;
+  return (t, _n) => {
+    const swell = 0.65 + 0.35 * Math.sin(2 * Math.PI * 0.1 * t);
+    const swell2 = 0.65 + 0.35 * Math.sin(2 * Math.PI * 0.2 * t + 1.3);
+    const base = Math.sin(2 * Math.PI * 55 * t) * swell;
+    const fifth = Math.sin(2 * Math.PI * 82.5 * t) * 0.6 * swell2;
+    const octave = Math.sin(2 * Math.PI * 110 * t) * 0.45 * swell;
+    const shimmerL = Math.sin(2 * Math.PI * 165.1 * t) * 0.12 * swell2;
+    const shimmerR = Math.sin(2 * Math.PI * 164.9 * t) * 0.12 * swell2;
+    const core = base + fifth + octave;
+    return [(core + shimmerL) * gain, (core + shimmerR) * gain];
+  };
+}
+
 interface SoundscapeDefinition {
   id: string;
   name: string;
@@ -366,6 +426,28 @@ const SOUNDSCAPES: SoundscapeDefinition[] = [
     color: COLORS.textSecondary,
     locked: false,
     buildGenerator: () => makeWhiteNoiseGenerator(),
+  },
+  {
+    id: 'calming_rain',
+    name: 'Calming Rain',
+    subtitle: 'Procedural Rainfall',
+    description:
+      'A soft, steady rain texture with gentle droplets — synthesized on-device to drown out office and household noise.',
+    icon: CloudRain,
+    color: '#5EA8FF',
+    locked: false,
+    buildGenerator: () => makeRainGenerator(),
+  },
+  {
+    id: 'midnight_drone',
+    name: 'Midnight Drone',
+    subtitle: 'Ambient Low Drone',
+    description:
+      'A slow, swelling low-frequency ambient drone for late-night writing, coding and study sessions.',
+    icon: Radio,
+    color: '#B58CFF',
+    locked: false,
+    buildGenerator: () => makeMidnightDroneGenerator(),
   },
   {
     id: 'binaural_gamma_40hz',
@@ -482,6 +564,7 @@ let RewardedAd: any = null;
 let AdEventType: any = null;
 let RewardedAdEventType: any = null;
 let TestIds: any = null;
+let AdsConsent: any = null;
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -494,6 +577,7 @@ try {
   AdEventType = googleMobileAds.AdEventType;
   RewardedAdEventType = googleMobileAds.RewardedAdEventType;
   TestIds = googleMobileAds.TestIds;
+  AdsConsent = googleMobileAds.AdsConsent;
 } catch (err) {
   console.warn(
     '[FocusFlow][AdMob] Native module unavailable in this runtime — ads disabled safely.',
@@ -507,6 +591,24 @@ let mobileAdsInitialized = false;
 async function safeInitializeAds(): Promise<void> {
   if (mobileAdsInitialized || !MobileAds) return;
   try {
+    // Conservative, family-friendly ad configuration (matches the in-app
+    // privacy disclosures): G-rated, non-personalized, child-directed tagging.
+    try {
+      await MobileAds().setRequestConfiguration({
+        maxAdContentRating: 'G',
+        tagForChildDirectedTreatment: true,
+        tagForUnderAgeOfConsent: true,
+      });
+    } catch (err) {
+      console.warn('[FocusFlow][AdMob] setRequestConfiguration failed safely:', err);
+    }
+    try {
+      if (AdsConsent && typeof AdsConsent.gatherConsent === 'function') {
+        await AdsConsent.gatherConsent();
+      }
+    } catch (err) {
+      console.warn('[FocusFlow][AdMob] Consent gathering failed safely:', err);
+    }
     await MobileAds().initialize();
     mobileAdsInitialized = true;
   } catch (err) {
@@ -527,7 +629,7 @@ function useSafeInterstitialAd() {
     try {
       const unitId = __DEV__ && TestIds ? TestIds.INTERSTITIAL : ADMOB_CONFIG.interstitialId;
       const ad = InterstitialAd.createForAdRequest(unitId, {
-        requestNonPersonalizedAdsOnly: false,
+        requestNonPersonalizedAdsOnly: true,
       });
 
       const unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
@@ -595,10 +697,10 @@ function useSafeRewardedAd(onReward: () => void) {
     try {
       const unitId = __DEV__ && TestIds ? TestIds.REWARDED : ADMOB_CONFIG.rewardedId;
       const ad = RewardedAd.createForAdRequest(unitId, {
-        requestNonPersonalizedAdsOnly: false,
+        requestNonPersonalizedAdsOnly: true,
       });
 
-      const unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
+      const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
         setLoaded(true);
       });
       const unsubError = ad.addAdEventListener(AdEventType.ERROR, (e: any) => {
@@ -683,7 +785,7 @@ const SafeBannerAd: React.FC = () => {
         <BannerAd
           unitId={unitId}
           size={BannerAdSize?.ANCHORED_ADAPTIVE_BANNER ?? 'BANNER'}
-          requestOptions={{ requestNonPersonalizedAdsOnly: false }}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
           onAdFailedToLoad={(err: any) => {
             console.warn('[FocusFlow][AdMob] Banner failed to load (safe):', err);
             setFailed(true);
@@ -853,7 +955,11 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           bestStreak: 0,
           lastCompletedDate: null,
         });
-        setStreak(storedStreak);
+        const streakStale =
+          storedStreak.lastCompletedDate !== null &&
+          storedStreak.lastCompletedDate !== today &&
+          !isYesterday(storedStreak.lastCompletedDate);
+        setStreak(streakStale ? { ...storedStreak, currentStreak: 0 } : storedStreak);
 
         const storedStats = await safeGetJSON<StatsData>(STORAGE_KEYS.STATS, {
           daily: [],
@@ -885,6 +991,17 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useEffect(() => {
     if (isLoading) return;
     safeSetJSON(STORAGE_KEYS.TASKS, tasks);
+  }, [tasks, isLoading]);
+
+  // Keep today's entry in the completed-task history in sync with the list.
+  useEffect(() => {
+    if (isLoading || tasks.length === 0) return;
+    const today = todayISO();
+    const completed = tasks.filter((t) => t.completed).length;
+    setTaskHistory((prev) => {
+      const others = prev.filter((e) => e.date !== today);
+      return [...others, { date: today, completedCount: completed, totalCount: tasks.length }].slice(-60);
+    });
   }, [tasks, isLoading]);
 
   useEffect(() => {
@@ -1052,9 +1169,16 @@ const CircularProgressRing: React.FC<CircularProgressRingProps> = ({
 
 type SessionMode = 'focus' | 'break';
 
+const FOCUS_PRESETS = [
+  { label: '25m', focus: 25, brk: 5 },
+  { label: '50m', focus: 50, brk: 10 },
+  { label: '90m', focus: 90, brk: 15 },
+];
+
 const FocusTimerTab: React.FC<{
   interstitial: { show: () => void; loaded: boolean };
-}> = ({ interstitial }) => {
+  onRunningChange: (running: boolean) => void;
+}> = ({ interstitial, onRunningChange }) => {
   const { recordFocusSession, soundEnabled } = useAppContext();
 
   const [focusMinutes, setFocusMinutes] = useState(DEFAULT_FOCUS_MINUTES);
@@ -1071,6 +1195,11 @@ const FocusTimerTab: React.FC<{
   const bellSoundRef = useRef<Audio.Sound | null>(null);
   const tickSoundRef = useRef<Audio.Sound | null>(null);
   const lastTickSecondRef = useRef<number>(-1);
+
+  // Let the shell know when a session is live so the banner can hide.
+  useEffect(() => {
+    onRunningChange(isRunning);
+  }, [isRunning, onRunningChange]);
 
   const totalSecondsForMode = useMemo(
     () => (mode === 'focus' ? focusMinutes * 60 : breakMinutes * 60),
@@ -1168,8 +1297,6 @@ const FocusTimerTab: React.FC<{
     intervalRef.current = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          handleSessionComplete();
           return 0;
         }
         const next = prev - 1;
@@ -1184,7 +1311,23 @@ const FocusTimerTab: React.FC<{
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, handleSessionComplete, playTick]);
+  }, [isRunning, playTick]);
+
+  // Completion is handled outside the state updater so side effects run once.
+  useEffect(() => {
+    if (isRunning && secondsLeft === 0) {
+      handleSessionComplete();
+    }
+  }, [isRunning, secondsLeft, handleSessionComplete]);
+
+  const applyPreset = (f: number, b: number) => {
+    setFocusMinutes(f);
+    setBreakMinutes(b);
+    setCustomFocusInput(String(f));
+    setCustomBreakInput(String(b));
+    setIsRunning(false);
+    setSecondsLeft((mode === 'focus' ? f : b) * 60);
+  };
 
   const toggleRunning = () => setIsRunning((r) => !r);
 
@@ -1273,6 +1416,24 @@ const FocusTimerTab: React.FC<{
               Zen Break
             </Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.presetRow}>
+          {FOCUS_PRESETS.map((p) => {
+            const active = focusMinutes === p.focus && breakMinutes === p.brk;
+            return (
+              <TouchableOpacity
+                key={p.label}
+                style={[styles.presetChip, active && styles.presetChipActive]}
+                onPress={() => applyPreset(p.focus, p.brk)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <CircularProgressRing progress={progress} color={ringColor}>
@@ -1536,7 +1697,7 @@ const SoundSanctuaryTab: React.FC<{
 // SECTION 10: TAB 3 — PRIORITY VAULT ("Rule of 3")
 // =============================================================================
 
-const MAX_DAILY_TASKS = 3;
+const MAX_DAILY_TASKS = 5;
 
 const PriorityVaultTab: React.FC = () => {
   const { tasks, setTasks, taskHistory, streak, setStreak } = useAppContext();
@@ -1552,8 +1713,8 @@ const PriorityVaultTab: React.FC = () => {
     if (!trimmed) return;
     if (tasks.length >= MAX_DAILY_TASKS) {
       Alert.alert(
-        'Rule of 3',
-        'FocusFlow limits you to 3 priorities per day, by design — pick what truly matters.'
+        'Daily limit',
+        'FocusFlow keeps you to 5 priorities per day, by design — pick what truly matters.'
       );
       return;
     }
@@ -1604,7 +1765,7 @@ const PriorityVaultTab: React.FC = () => {
       <ScrollView contentContainerStyle={styles.screenScrollContent}>
         <Text style={styles.screenTitle}>Priority Vault</Text>
         <Text style={styles.screenSubtitle}>
-          The Rule of 3 — just three priorities, done with intention.
+          Your top 3 to 5 daily non-negotiables, done with intention.
         </Text>
 
         <View style={styles.streakCard}>
@@ -1621,7 +1782,7 @@ const PriorityVaultTab: React.FC = () => {
         </View>
 
         <View style={styles.taskProgressRow}>
-          {[0, 1, 2].map((i) => (
+          {Array.from({ length: MAX_DAILY_TASKS }, (_, i) => i).map((i) => (
             <View
               key={i}
               style={[
@@ -1674,7 +1835,7 @@ const PriorityVaultTab: React.FC = () => {
 
           {tasks.length === 0 && (
             <Text style={styles.emptyStateText}>
-              Add up to 3 priorities for today. Small list, real focus.
+              Add your top 3 to 5 priorities for today. Small list, real focus.
             </Text>
           )}
         </View>
@@ -1866,13 +2027,29 @@ const DeepWorkStatsTab: React.FC = () => {
           </View>
         </View>
 
+        <View style={styles.aboutCard}>
+          <Text style={styles.allTimeTitle}>About</Text>
+          <Text style={styles.aboutLine}>{BRAND.appTitle} • v1.0.0</Text>
+          <Text style={styles.aboutLine}>{BRAND.studio}</Text>
+          <Text style={styles.aboutLine}>{BRAND.packageName}</Text>
+          <TouchableOpacity
+            style={styles.aboutLinkRow}
+            onPress={() => Linking.openURL(BRAND.portal).catch(() => {})}
+            activeOpacity={0.7}
+          >
+            <Globe size={14} color={COLORS.primaryLight} />
+            <Text style={styles.aboutLink}>Official Web Portal</Text>
+          </TouchableOpacity>
+          <Text style={styles.aboutCopyright}>{BRAND.copyright}</Text>
+        </View>
+
         <TouchableOpacity
           style={styles.privacyLinkRow}
           onPress={() => setPrivacyVisible(true)}
           activeOpacity={0.7}
         >
           <ShieldCheck size={16} color={COLORS.textSecondary} />
-          <Text style={styles.privacyLinkText}>Privacy Policy</Text>
+          <Text style={styles.privacyLinkText}>Privacy Policy & Terms</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -1885,37 +2062,42 @@ const DeepWorkStatsTab: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Privacy Policy</Text>
+              <Text style={styles.modalTitle}>Privacy Policy & Terms</Text>
               <TouchableOpacity onPress={() => setPrivacyVisible(false)}>
                 <X size={22} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
             <ScrollView>
               <Text style={styles.privacyParagraph}>
-                FocusFlow OS is built to be 100% private by design. There is no account,
-                no login, and no cloud sync — every priority, streak, and focus-minute
-                total shown in this app is generated on this device and stored only in
-                this device's local app storage.
+                Brand: {BRAND.studio}{'\n'}
+                App: {BRAND.appTitle} ({BRAND.packageName}){'\n'}
+                Portal: {BRAND.portal}{'\n'}
+                {BRAND.copyright}
               </Text>
               <Text style={styles.privacyParagraph}>
-                No personal data, task text, or usage statistics is transmitted to
-                ZeeU Creative Studio or any third party by this app's own code.
+                1. Google Mobile Ads (AdMob) SDK Disclosure: Contextual ads are served via
+                react-native-google-mobile-ads, adhering to Google Play policies. Ads are
+                requested as non-personalized and G-rated. Google may process standard device
+                identifiers under Google's own privacy policy to deliver and measure ads.
               </Text>
               <Text style={styles.privacyParagraph}>
-                Advertising is served exclusively through Google AdMob (Banner,
-                Interstitial, and Rewarded formats). AdMob may collect standard
-                advertising identifiers and interaction data under Google's own privacy
-                policy in order to serve and measure ads. This app does not control or
-                access that data.
+                2. Zero PII Collection: No names, emails, contacts, location, or telemetry are
+                gathered by this app.
               </Text>
               <Text style={styles.privacyParagraph}>
-                Uninstalling the app permanently removes all locally stored priorities,
-                streaks, and statistics — nothing remains on any server, because nothing
-                was ever sent to one.
+                3. 100% Offline Storage: User tasks, focus logs, and preferences stay on your
+                device via AsyncStorage. Uninstalling the app removes them permanently.
               </Text>
               <Text style={styles.privacyParagraph}>
-                Questions about this policy can be directed to ZeeU Creative Studio via
-                the support portal listed on the app's store page.
+                4. Zero In-App Purchases: 100% Free Forever with zero paywalls. The optional
+                rewarded video only unlocks one bonus soundscape at no cost.
+              </Text>
+              <Text style={styles.privacyParagraph}>
+                5. Families & COPPA/GDPR Compliance: A child-safe, distraction-free
+                environment with no accounts and no personal data collection.
+              </Text>
+              <Text style={styles.privacyParagraph}>
+                Terms: FocusFlow OS is provided as-is, free of charge, for personal use.
               </Text>
             </ScrollView>
           </View>
@@ -2022,71 +2204,27 @@ const AppShell: React.FC = () => {
       </View>
 
       <View style={styles.content}>
-        {activeTab === 'timer' && (
-          <FocusTimerTabWithRunTracking
-            interstitial={interstitial}
-            onRunningChange={setIsFocusRunning}
-          />
-        )}
-        {activeTab === 'sounds' && <SoundSanctuaryTab rewarded={rewarded} />}
-        {activeTab === 'vault' && <PriorityVaultTab />}
-        {activeTab === 'stats' && <DeepWorkStatsTab />}
+        {/* Tabs stay mounted so the timer and audio keep running while you switch. */}
+        <View style={[styles.tabHost, activeTab !== 'timer' && styles.tabHidden]}>
+          <FocusTimerTab interstitial={interstitial} onRunningChange={setIsFocusRunning} />
+        </View>
+        <View style={[styles.tabHost, activeTab !== 'sounds' && styles.tabHidden]}>
+          <SoundSanctuaryTab rewarded={rewarded} />
+        </View>
+        <View style={[styles.tabHost, activeTab !== 'vault' && styles.tabHidden]}>
+          <PriorityVaultTab />
+        </View>
+        <View style={[styles.tabHost, activeTab !== 'stats' && styles.tabHidden]}>
+          <DeepWorkStatsTab />
+        </View>
       </View>
 
       {/* Banner is hidden during an active focus session to prevent accidental clicks. */}
+      <Text style={styles.watermark}>{BRAND.watermark}</Text>
       {!isFocusRunning && <SafeBannerAd />}
 
       <BottomTabBar activeTab={activeTab} onChange={setActiveTab} />
     </View>
-  );
-};
-
-/**
- * Thin wrapper so the root shell can know whether a focus session is
- * currently running (to hide the banner) without lifting all of the
- * timer's internal state up unnecessarily.
- */
-const FocusTimerTabWithRunTracking: React.FC<{
-  interstitial: { show: () => void; loaded: boolean };
-  onRunningChange: (running: boolean) => void;
-}> = ({ interstitial, onRunningChange }) => {
-  return (
-    <RunningTracker onRunningChange={onRunningChange}>
-      <FocusTimerTab interstitial={interstitial} />
-    </RunningTracker>
-  );
-};
-
-/**
- * FocusTimerTab manages its own isRunning state internally. To keep the
- * component boundary clean while still letting AppShell hide the banner
- * during a live session, we watch a lightweight global signal instead of
- * prop-drilling setters through every render — implemented here via a
- * simple polling-free pub/sub context specific to run-state.
- */
-const RunStateContext = createContext<{
-  isRunning: boolean;
-  setIsRunning: (v: boolean) => void;
-} | null>(null);
-
-const RunningTracker: React.FC<{
-  onRunningChange: (running: boolean) => void;
-  children: React.ReactNode;
-}> = ({ onRunningChange, children }) => {
-  const [isRunning, setIsRunningState] = useState(false);
-
-  const setIsRunning = useCallback(
-    (v: boolean) => {
-      setIsRunningState(v);
-      onRunningChange(v);
-    },
-    [onRunningChange]
-  );
-
-  return (
-    <RunStateContext.Provider value={{ isRunning, setIsRunning }}>
-      {children}
-    </RunStateContext.Provider>
   );
 };
 
@@ -2649,6 +2787,73 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 14,
+  },
+  watermark: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    opacity: 0.35,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    color: '#A3A3A3',
+    marginVertical: 4,
+  },
+  tabHost: {
+    flex: 1,
+  },
+  tabHidden: {
+    display: 'none',
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+  presetChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  presetChipActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: 'rgba(108, 99, 255, 0.18)',
+  },
+  presetChipText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  presetChipTextActive: {
+    color: COLORS.textPrimary,
+  },
+  aboutCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 6,
+  },
+  aboutLine: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  aboutLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  aboutLink: {
+    color: COLORS.primaryLight,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  aboutCopyright: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 6,
   },
   bannerContainer: {
     width: '100%',

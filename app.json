@@ -6,13 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0A1910",
+    "backgroundColor": "#0B0E14",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A1910"
+      "backgroundColor": "#0B0E14"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.zeeucreativestudio.focusflowos",
@@ -20,20 +22,23 @@
       "infoPlist": {
         "GADApplicationIdentifier": "ca-app-pub-5206710479803910~6573330902",
         "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads that support FocusFlow OS, which remains 100% free with zero in-app purchases.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A1910"
+        "backgroundColor": "#0B0E14"
       },
       "package": "com.zeeucreativestudio.focusflowos",
       "versionCode": 1,
       "permissions": [
-        "com.google.android.gms.permission.AD_ID",
-        "android.permission.INTERNET",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.INTERNET"
+      ],
+      "blockedPermissions": [
+        "com.google.android.gms.permission.AD_ID"
       ]
     },
     "web": {
@@ -44,10 +49,10 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.24",
             "compileSdkVersion": 34,
             "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0"
+            "buildToolsVersion": "34.0.0",
+            "kotlinVersion": "1.9.24"
           }
         }
       ],
@@ -67,10 +72,7 @@
       ]
     ],
     "extra": {
-      "eas": {
-        "projectId": "zeeu-focusflow-os"
-      }
-    },
-    "owner": "zeeu-creative-studio"
+      "portal": "https://zeeu-creative-studio-e-book-vault.ai.studio"
+    }
   }
 }
