@@ -31,7 +31,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Setup EAS CLI
         run: npm install -g eas-cli
